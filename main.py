@@ -49,4 +49,4 @@ def run_flask():
 if __name__ == "__main__":
     # Start Flask in a separate thread for UptimeRobot to ping
     threading.Thread(target=run_flask).start()
-    bot.run("YOUR_DISCORD_BOT_TOKEN")
+    bot.run(os.environ.get('DISCORD_TOKEN'))
