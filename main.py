@@ -12,9 +12,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Configuration: Replace with your actual Role IDs
 ROLE_IDS = {
     "copper": 1234567890,
-    "iron": 1234567891,
-    "diamond": 1234567892,
-    "netherite": 1234567893
+    "iron": 1471911461239394455,
+    "diamond": 1471910336213815327,
+    "netherite": 1471915697750806621
 }
 
 @app.route('/update', methods=['POST'])
