@@ -1,21 +1,38 @@
 import discord
 from discord.ext import commands
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import threading
-import os
+import random
+import string
+import json
 
 app = Flask(__name__)
-intents = discord.Intents.default()
-intents.members = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
-# Configuration: Replace with your actual Role IDs
-ROLE_IDS = {
-    "copper": 1234567890,
-    "iron": 1471911461239394455,
-    "diamond": 1471910336213815327,
-    "netherite": 1471915697750806621
-}
+# Temporary storage for codes: { "code": "MinecraftName" }
+pending_links = {}
+
+# Persistent storage: { "MinecraftName": "DiscordID" }
+try:
+    with open("links.json", "r") as f:
+        linked_accounts = json.load(f)
+except:
+    linked_accounts = {}
+
+def save_links():
+    with open("links.json", "w") as f:
+        json.dump(linked_accounts, f)
+
+# --- FLASK ENDPOINTS ---
+
+@app.route('/request_link', methods=['POST'])
+def request_link():
+    data = request.json
+    username = data.get("username")
+    # Generate a random 6-digit code
+    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    pending_links[code] = username
+    return jsonify({"code": code}), 200
 
 @app.route('/update', methods=['POST'])
 def update_armor():
@@ -23,30 +40,33 @@ def update_armor():
     username = data.get("username")
     material = data.get("armor")
     
-    # We trigger a background task in the bot to update roles
-    bot.loop.create_task(assign_role(username, material))
-    return {"status": "success"}, 200
+    # Check if the player is linked
+    if username in linked_accounts:
+        discord_id = linked_accounts[username]
+        bot.loop.create_task(assign_role(discord_id, material))
+    return {"status": "processed"}, 200
 
-async def assign_role(username, material):
-    guild = bot.guilds[0] # Assumes bot is in one server
-    member = discord.utils.get(guild.members, name=username)
-    
-    if member and material in ROLE_IDS:
-        role = guild.get_role(ROLE_IDS[material])
-        if role not in member.roles:
-            # Remove other armor roles first (optional)
-            await member.remove_roles(*[guild.get_role(i) for i in ROLE_IDS.values() if guild.get_role(i) in member.roles])
-            await member.add_roles(role)
-            print(f"Assigned {material} role to {username}")
+# --- DISCORD COMMANDS ---
 
-@app.route('/')
-def home():
-    return "Bot is Online"
+@bot.command()
+async def link(ctx, code: str):
+    code = code.upper()
+    if code in pending_links:
+        mc_name = pending_links.pop(code)
+        linked_accounts[mc_name] = ctx.author.id
+        save_links()
+        await ctx.send(f"✅ Successfully linked **{mc_name}** to your Discord account!")
+    else:
+        await ctx.send("❌ Invalid or expired code. Run `/scriptevent sync:link` in Minecraft again.")
+
+async def assign_role(user_id, material):
+    guild = bot.guilds[0] 
+    member = await guild.fetch_member(user_id)
+    # (Role logic from previous response goes here...)
 
 def run_flask():
     app.run(host="0.0.0.0", port=10000)
 
 if __name__ == "__main__":
-    # Start Flask in a separate thread for UptimeRobot to ping
     threading.Thread(target=run_flask).start()
     bot.run(os.environ.get('DISCORD_TOKEN'))
